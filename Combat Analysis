@@ -1,0 +1,120 @@
+drop table if exists sandbox_analytics.tbl_combat_preference; 
+create table sandbox_analytics.tbl_combat_preference as 
+
+-- Special classes 
+with special_classes as
+(
+select 
+       pva.user_id as learner_uid, 
+       tt.id as goal_id, 
+       date_trunc('month',pva.updated_at + interval '330 minutes') as watched_month, 
+       (sum(pva.total_run_time)*1.0)/60 as total_run_time
+from posts_post pp 
+left join uplus_liveclass ul on ul.id = pp.live_class_id 
+left join uplus_programme up on ul.programme_id = up.id 
+left join uplus_programmeextradetails upe on up.id = upe.programme_id 
+left join topology_topology tt on tt.id = up.topology_id 
+left join production_video_analytics pva on pva.video_id = pp.uid 
+left join users_userprofile uu on pp.user_id = uu.user_id 
+left join auth_user au on au.id = pp.user_id 
+left join 
+(
+select learner_uid, 
+       goal_id, 
+       dates, 
+       individual_subscription_type 
+from truth.tbl_daily_learner 
+where dates >= current_date - interval '1 year'
+)tdl 
+on tdl.learner_uid = pva.user_id and tdl.goal_id = tt.id and tdl.dates = (pva.updated_at + interval '330 minutes')::date 
+where pp.is_deleted = 0 
+and pp.is_active = 1 
+and upe.for_subscription = 0 
+and up.is_special = 1 
+and pva.total_run_time <= 14000 
+and pva.is_offline = 0 
+and ul.state <> 50 
+and (pva.updated_at + interval '330 minutes')::date >= current_date - interval '1 year' and (pva.updated_at + interval '330 minutes')::date < current_date
+and tdl.individual_subscription_type in ('Unpaid')
+group by 1,2,3 
+),
+
+final_data as 
+(
+select coalesce(sc.learner_uid, a.learner_uid) as learner_uid, 
+       coalesce(sc.goal_id, a.goal_id) as goal_id, 
+       coalesce(sc.watched_month, date_trunc('month',quiz_start_time)) as engagement_month, 
+       coalesce(sc.total_run_time,0) as total_run_time, 
+       count(distinct quiz_session_id) as total_sessions,
+       count(distinct case when quiz_type = 1 and is_special = 1 and for_subscription = 0 then quiz_session_id end) as Free_test_sessions,
+       count(distinct case when quiz_type = 8 then quiz_session_id end) as DST_sessions, 
+       count(distinct case when quiz_type in (2,10) then quiz_session_id end) as Practice_sessions, 
+       count(distinct case when quiz_type = 11 then quiz_session_id end) as Compete_sessions, 
+       count(distinct case when quiz_type = 5 then quiz_session_id end) as Combat_sessions, 
+       count(distinct case when quiz_type in (4,6) then quiz_session_id end) as live_quiz_sessions
+from 
+(
+select 
+       qs.user_id as user_id, 
+       uu.uid as learner_uid, 
+       qq.goal_id as goal_id, 
+       qs.id as quiz_session_id, 
+       (qs.start_time + interval '330 minutes') as quiz_start_time, 
+       qq.quiz_type, 
+       up.is_special, 
+       up2.for_subscription,
+       qus.no_of_questions      
+from 
+(
+select quiz_session_id, 
+       count(distinct question_id) no_of_questions 
+from quizzes_userquizsession
+group by 1) qus  
+left join quizzes_quizsession qs on qs.id = qus.quiz_session_id 
+left join quizzes_quiz qq on qq.id = qs.quiz_id 
+left join collection_item ci on qq.id = ci.object_id 
+left join collection_collection cc on ci.collection_id = cc.id 
+left join uplus_programme up on cc.programme_id = up.id 
+left join uplus_programmeextradetails up2 on up.id = up2.programme_id
+left join users_userprofile uu on uu.user_id = qs.user_id 
+left join 
+(select learner_uid, 
+        learner_id, 
+        topology_id, 
+        sub_type, 
+        purchase_type, 
+        purchase_date_time, 
+        amount,
+        rank() over(partition by learner_uid, topology_id order by purchase_date) rk
+from truth.tbl_revenue_base
+where purchase_date >= current_date - interval '1 year'
+) trb 
+on trb.learner_id = qs.user_id and trb.topology_id = qq.goal_id and trb.sub_type in ('Plus','Iconic') and trb.purchase_type = 'New' and trb.rk = 1 
+where qs.start_time::Date >= current_date - interval '1 year'
+and (qs.start_time <= trb.purchase_date_time or trb.purchase_date_time is null) 
+and uu.is_educator = 0 
+group by 1,2,3,4,5,6,7,8,9
+) a
+full join special_classes sc on sc.learner_uid = a.learner_uid and sc.goal_id = a.goal_id and sc.watched_month = date_trunc('month',a.quiz_start_time)
+group by 1,2,3,4
+) 
+
+select fd.*, 
+       trb.purchase_date_time, 
+       trb.amount, 
+       case when trb.purchase_date_time is null then 1 else 0 end as purchased_flag 
+from final_data fd 
+left join 
+(select learner_uid, 
+        learner_id, 
+        topology_id, 
+        sub_type, 
+        purchase_type, 
+        purchase_date_time, 
+        amount,
+        rank() over(partition by learner_uid, topology_id order by purchase_date) rk
+from truth.tbl_revenue_base
+where purchase_date >= current_date - interval '1 year'
+) trb 
+on trb.learner_uid = fd.learner_uid and trb.topology_id = fd.goal_id and trb.sub_type in ('Plus','Iconic') and trb.purchase_type = 'New' and trb.rk = 1 
+and date_trunc('month',trb.purchase_date_time) <= date_trunc('month',dateadd(month,1,fd.engagement_month)) 
