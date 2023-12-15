@@ -140,5 +140,87 @@ left join users_userreferralcode ur on ur.valid_for_id = trb.learner_id and ur.c
 left join users_referralbenefit urr on ur.id = urr.referral_code_id 
 left join users_userprofile uu on uu.uid = fd.learner_uid
 left join users_userreferralcode ur2 on uu.user_id = ur2.valid_for_id 
+
+
+
+======================================= AGGREGATING and STRUCTURING IT =============================================================
+select 'Without Scholarship' as type, 
+        1 as flag,
+        business_category_name, 
+     count(distinct case when referral_flag = 0 and purchased_flag = 1 and combat_sessions > 0 and combat_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00/count(distinct case when referral_flag = 0 and combat_sessions > 0 and combat_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00 as combat_without_other_value_offering, 
+     count(distinct case when referral_flag = 0 and purchased_flag = 1 and free_test_sessions > 0 and free_test_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00/count(distinct case when referral_flag = 0 and free_test_sessions > 0 and free_test_sessions = total_sessions and total_run_time = 0
+     then learner_uid end) as free_test_without_other_value_offering,
+     count(distinct case when referral_flag = 0 and purchased_flag = 1 and dst_sessions > 0 and dst_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00/count(distinct case when referral_flag = 0 and dst_sessions > 0 and dst_sessions = total_sessions and total_run_time = 0
+     then learner_uid end) as dst_without_other_value_offering,
+     count(distinct case when referral_flag = 0 and purchased_flag = 1 and combat_sessions > 0 then learner_uid end)*1.00/
+     count(distinct case when referral_flag = 0 and combat_sessions > 0 then learner_uid end) as combat_with_other_value_offering, 
+     count(distinct case when referral_flag = 0 and purchased_flag = 1 and free_test_sessions > 0 then learner_uid end)*1.00/
+     count(distinct case when referral_flag = 0 and free_test_sessions > 0 then learner_uid end)*1.00 as free_test_with_other_value_offering, 
+     count(distinct case when referral_flag = 0 and purchased_flag = 1 and dst_sessions > 0 then learner_uid end)*1.00/ 
+     count(distinct case when referral_flag = 0 and dst_sessions > 0 then learner_uid end)*1.00 as dst_with_other_value_offering
+from 
+(
+select tbc.*, case when referral_code_2 is not null then 1 else 0 end as referral_flag
+from sandbox_analytics.tbl_combat_preference tbc 
+where business_category_name in ('GATE, ESE and IIT-JAM','UPSC CSE','IIT JEE')
+)
+group by business_category_name
+union all 
+select 'With Scholarship' as type, 
+        2 as flag,
+        business_category_name, 
+     count(distinct case when referral_flag = 1 and purchased_flag = 1 and combat_sessions > 0 and combat_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00/count(distinct case when referral_flag = 1 and combat_sessions > 0 and combat_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00 as combat_without_other_value_offering, 
+     count(distinct case when referral_flag = 1 and purchased_flag = 1 and free_test_sessions > 0 and free_test_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00/count(distinct case when referral_flag = 1 and free_test_sessions > 0 and free_test_sessions = total_sessions and total_run_time = 0
+     then learner_uid end) as free_test_without_other_value_offering,
+     count(distinct case when referral_flag = 1 and purchased_flag = 1 and dst_sessions > 0 and dst_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00/count(distinct case when referral_flag = 1 and dst_sessions > 0 and dst_sessions = total_sessions and total_run_time = 0
+     then learner_uid end) as dst_without_other_value_offering,
+     count(distinct case when referral_flag = 1 and purchased_flag = 1 and combat_sessions > 0 then learner_uid end)*1.00/
+     count(distinct case when referral_flag = 1 and combat_sessions > 0 then learner_uid end) as combat_with_other_value_offering, 
+     count(distinct case when referral_flag = 1 and purchased_flag = 1 and free_test_sessions > 0 then learner_uid end)*1.00/
+     count(distinct case when referral_flag = 1 and free_test_sessions > 0 then learner_uid end)*1.00 as free_test_with_other_value_offering, 
+     count(distinct case when referral_flag = 1 and purchased_flag = 1 and dst_sessions > 0 then learner_uid end)*1.00/ 
+     count(distinct case when referral_flag = 1 and dst_sessions > 0 then learner_uid end)*1.00 as dst_with_other_value_offering
+from 
+(
+select tbc.*, case when referral_code_2 is not null then 1 else 0 end as referral_flag
+from sandbox_analytics.tbl_combat_preference tbc 
+where business_category_name in ('GATE, ESE and IIT-JAM','UPSC CSE','IIT JEE')
+)
+group by business_category_name 
+union all
+select 'Overall' as type, 
+        3 as flag,
+        business_category_name, 
+     count(distinct case when purchased_flag = 1 and combat_sessions > 0 and combat_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00/count(distinct case when combat_sessions > 0 and combat_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00 as combat_without_other_value_offering, 
+     count(distinct case when purchased_flag = 1 and free_test_sessions > 0 and free_test_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00/count(distinct case when free_test_sessions > 0 and free_test_sessions = total_sessions and total_run_time = 0
+     then learner_uid end) as free_test_without_other_value_offering,
+     count(distinct case when purchased_flag = 1 and dst_sessions > 0 and dst_sessions = total_sessions and total_run_time = 0
+     then learner_uid end)*1.00/count(distinct case when dst_sessions > 0 and dst_sessions = total_sessions and total_run_time = 0
+     then learner_uid end) as dst_without_other_value_offering,
+     count(distinct case when purchased_flag = 1 and combat_sessions > 0 then learner_uid end)*1.00/
+     count(distinct case when combat_sessions > 0 then learner_uid end) as combat_with_other_value_offering, 
+     count(distinct case when purchased_flag = 1 and free_test_sessions > 0 then learner_uid end)*1.00/
+     count(distinct case when free_test_sessions > 0 then learner_uid end)*1.00 as free_test_with_other_value_offering, 
+     count(distinct case when purchased_flag = 1 and dst_sessions > 0 then learner_uid end)*1.00/ 
+     count(distinct case when dst_sessions > 0 then learner_uid end)*1.00 as dst_with_other_value_offering
+from 
+(
+select tbc.*, case when referral_code_2 is not null then 1 else 0 end as referral_flag
+from sandbox_analytics.tbl_combat_preference tbc 
+where business_category_name in ('GATE, ESE and IIT-JAM','UPSC CSE','IIT JEE')
+)
+group by business_category_name
+order by flag, business_category_name 
 left join users_referralbenefit urr2 on ur2.id = urr2.referral_code_id 
 -- and ur.code = trb.referral_code -- and ur.code ilike 'SCHLR%'
