@@ -2,7 +2,7 @@ drop table if exists sandbox_analytics.tbl_combat_preference;
 create table sandbox_analytics.tbl_combat_preference as 
 
 -- Special classes 
-with special_classes as
+with special_classes as 
 (
 select 
        pva.user_id as learner_uid, 
@@ -100,21 +100,45 @@ group by 1,2,3,4
 ) 
 
 select fd.*, 
+       bclgm.business_category_name, 
+       trb.topology_name, 
        trb.purchase_date_time, 
        trb.amount, 
-       case when trb.purchase_date_time is null then 1 else 0 end as purchased_flag 
+       trb.subscription_price, 
+       case when trb.purchase_date_time is not null then 1 else 0 end as purchased_flag, 
+       trb.referral_code,
+       ur.referral_type, 
+       ur.count, 
+       credits,
+       urr.value, 
+       (subscription_price::double precision - credits - (1.18 * amount)) as discount, 
+       ur2.code as referral_code_2, 
+       urr2.value as value_2, 
+       ur2.count as count_2 
 from final_data fd 
+left join sandbox_analytics.business_category_leader_goal_mapping bclgm on fd.goal_id = bclgm.goal_id
 left join 
 (select learner_uid, 
         learner_id, 
         topology_id, 
+        topology_name, 
         sub_type, 
         purchase_type, 
+        business_category_name,
         purchase_date_time, 
+        subscription_price,
         amount,
+        referral_code,
+        credits,
         rank() over(partition by learner_uid, topology_id order by purchase_date) rk
 from truth.tbl_revenue_base
 where purchase_date >= current_date - interval '1 year'
 ) trb 
-on trb.learner_uid = fd.learner_uid and trb.topology_id = fd.goal_id and trb.sub_type in ('Plus','Iconic') and trb.purchase_type = 'New' and trb.rk = 1 
+on trb.learner_uid = fd.learner_uid and trb.business_category_name = bclgm.business_category_name and trb.sub_type in ('Plus','Iconic') and trb.purchase_type = 'New' and trb.rk = 1 
 and date_trunc('month',trb.purchase_date_time) <= date_trunc('month',dateadd(month,1,fd.engagement_month)) 
+left join users_userreferralcode ur on ur.valid_for_id = trb.learner_id and ur.code = trb.referral_code
+left join users_referralbenefit urr on ur.id = urr.referral_code_id 
+left join users_userprofile uu on uu.uid = fd.learner_uid
+left join users_userreferralcode ur2 on uu.user_id = ur2.valid_for_id 
+left join users_referralbenefit urr2 on ur2.id = urr2.referral_code_id 
+-- and ur.code = trb.referral_code -- and ur.code ilike 'SCHLR%'
